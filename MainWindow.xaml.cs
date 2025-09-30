@@ -40,7 +40,11 @@ namespace WpfApp1
                 InitBaudList();
                 LoadPorts();
                 SetupPlot();
+                Disconnect();
+
             };
+            BtnMode.Click += (_, __) => SendMode();
+
 
             BtnRefresh.Click += (_, __) => LoadPorts();
             BtnConnect.Click += (_, __) => Connect();
@@ -63,6 +67,13 @@ namespace WpfApp1
             CmbBaud.ItemsSource = baudrates;
             CmbBaud.SelectedItem = _baud;
             TxtBaudSel.Text = $"Baud: {_baud}";
+        }
+        private void SendMode()
+        {
+            if (!EnsurePort()) return;
+            string mode = (CmbMode.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "PID";
+            _port!.WriteLine($"MODE {mode}");
+            AppendLog($"< MODE {mode}");
         }
 
         private void LoadPorts()
@@ -147,12 +158,15 @@ namespace WpfApp1
                 {
                     if (string.IsNullOrWhiteSpace(line)) continue;
                     AppendLog($"> {line}");
+
+                    TryParseMode(line);        // <-- THÊM DÒNG NÀY
                     TryParseTelemetry(line);
                     TryParsePid(line);
                 }
             }
             catch { /* ignore */ }
         }
+
 
         private void AppendLog(string s) => Dispatcher.Invoke(() =>
         {
@@ -181,6 +195,7 @@ namespace WpfApp1
                 Dispatcher.Invoke(() =>
                 {
                     TxtPos.Text = pos.ToString();
+                    TxtSpLive.Text = sp.ToString();   // <-- THÊM
                     // (tuỳ thích) hiển thị SP ở đâu đó, hoặc bỏ qua UI text
                     _buf.Enqueue((t, pos, sp));
                     while (_buf.Count > MaxSamples) _buf.Dequeue();
@@ -233,28 +248,194 @@ namespace WpfApp1
         private void Redraw()
         {
             if (_buf.Count == 0) return;
+
             double W = Math.Max(10, Plot.ActualWidth);
             double H = Math.Max(10, Plot.ActualHeight);
 
+            // Convert sang mảng để tính toán
             var arr = _buf.ToArray();
             _posLine.Points.Clear();
             _spLine.Points.Clear();
 
-            long t0 = arr[0].t, tN = arr[^1].t;
-            double span = Math.Max(1, tN - t0);
+            long t0 = arr[0].t;
+            long tN = arr[^1].t;
+            double span = Math.Max(1, tN - t0); // ms
 
+            // === Lấy min/max thủ công (LINQ) ===
             long ymin = arr.Min(x => Math.Min(x.pos, x.sp));
             long ymax = arr.Max(x => Math.Max(x.pos, x.sp));
             if (ymax == ymin) ymax = ymin + 1;
 
+            // === Map hàm ===
             double MapY(long v) => H - (v - ymin) / (double)(ymax - ymin) * H;
+            double MapX(long t) => (t - t0) / span * W;
 
+            // === Dọn canvas, giữ lại 2 line chính ===
+            if (Plot.Children.Count > 2)
+            {
+                for (int i = Plot.Children.Count - 1; i >= 2; i--)
+                    Plot.Children.RemoveAt(i);
+            }
+
+            // === Nền trắng ===
+            Plot.Background = Brushes.White;
+
+            // === Style line ===
+            _posLine.Stroke = Brushes.Blue;
+            _posLine.StrokeThickness = 2.5;
+            _posLine.StrokeDashArray = null;
+
+            _spLine.Stroke = Brushes.Red;
+            _spLine.StrokeThickness = 2;
+            _spLine.StrokeDashArray = new DoubleCollection { 5, 4 };
+
+            // === Vẽ đường dữ liệu ===
             foreach (var s in arr)
             {
-                double x = (s.t - t0) / span * W;
+                double x = MapX(s.t);
                 _posLine.Points.Add(new Point(x, MapY(s.pos)));
                 _spLine.Points.Add(new Point(x, MapY(s.sp)));
             }
+
+            // === Grid & label ===
+            int yTicks = 5, xTicks = 6;
+
+            // --- Grid ngang ---
+            for (int i = 0; i <= yTicks; i++)
+            {
+                double v = ymin + i * (ymax - ymin) / yTicks;
+                double y = MapY((long)v);
+
+                // line ngang
+                var line = new Line
+                {
+                    X1 = 0,
+                    X2 = W,
+                    Y1 = y,
+                    Y2 = y,
+                    Stroke = Brushes.Gray,
+                    StrokeThickness = 0.6,
+                    StrokeDashArray = new DoubleCollection { 2, 3 },
+                    Opacity = 0.5
+                };
+                Plot.Children.Add(line);
+
+                // label
+                var lbl = new TextBlock
+                {
+                    Text = v.ToString("0"),
+                    Foreground = Brushes.Black,
+                    FontSize = 11,
+                    FontFamily = new FontFamily("Consolas"),
+                    FontWeight = FontWeights.Bold
+                };
+                Canvas.SetLeft(lbl, 4);
+                Canvas.SetTop(lbl, y - 8);
+                Plot.Children.Add(lbl);
+            }
+
+            // --- Grid dọc ---
+            for (int i = 0; i <= xTicks; i++)
+            {
+                long t = t0 + (long)(i * span / xTicks);
+                double x = MapX(t);
+                double sec = (t - t0) / 1000.0;
+
+                var line = new Line
+                {
+                    X1 = x,
+                    X2 = x,
+                    Y1 = 0,
+                    Y2 = H,
+                    Stroke = Brushes.Gray,
+                    StrokeThickness = 0.6,
+                    StrokeDashArray = new DoubleCollection { 2, 3 },
+                    Opacity = 0.5
+                };
+                Plot.Children.Add(line);
+
+                var lbl = new TextBlock
+                {
+                    Text = $"{sec:0.0}s",
+                    Foreground = Brushes.Black,
+                    FontSize = 11,
+                    FontFamily = new FontFamily("Consolas"),
+                    FontWeight = FontWeights.Bold
+                };
+                Canvas.SetLeft(lbl, x + 2);
+                Canvas.SetTop(lbl, H - 18);
+                Plot.Children.Add(lbl);
+            }
+
+            // === Trục ===
+            var xAxis = new Line
+            {
+                X1 = 0,
+                X2 = W,
+                Y1 = H - 1,
+                Y2 = H - 1,
+                Stroke = Brushes.Black,
+                StrokeThickness = 1.2
+            };
+            Plot.Children.Add(xAxis);
+
+            var yAxis = new Line
+            {
+                X1 = 1,
+                X2 = 1,
+                Y1 = 0,
+                Y2 = H,
+                Stroke = Brushes.Black,
+                StrokeThickness = 1.2
+            };
+            Plot.Children.Add(yAxis);
+
+            // === Viền khung ===
+            var border = new Rectangle
+            {
+                Width = W,
+                Height = H,
+                Stroke = Brushes.Black,
+                StrokeThickness = 1
+            };
+            Plot.Children.Add(border);
+
+            // === Tên trục ===
+            var xlabel = new TextBlock
+            {
+                Text = "Time (s)",
+                Foreground = Brushes.Black,
+                FontSize = 12,
+                FontFamily = new FontFamily("Consolas")
+            };
+            Canvas.SetLeft(xlabel, W / 2 - 30);
+            Canvas.SetTop(xlabel, H - 24);
+            Plot.Children.Add(xlabel);
+
+            var ylabel = new TextBlock
+            {
+                Text = "Position (tick)",
+                Foreground = Brushes.Black,
+                FontSize = 12,
+                FontFamily = new FontFamily("Consolas")
+            };
+            Canvas.SetLeft(ylabel, 6);
+            Canvas.SetTop(ylabel, 4);
+            Plot.Children.Add(ylabel);
+
+            // === Hiển thị giá trị cuối ===
+            var last = arr[^1];
+            var valLabel = new TextBlock
+            {
+                Text = $"Pos={last.pos} | SP={last.sp}",
+                Foreground = Brushes.Black,
+                FontSize = 12,
+                FontFamily = new FontFamily("Consolas"),
+                FontWeight = FontWeights.Bold
+            };
+            Canvas.SetLeft(valLabel, W - 160);
+            Canvas.SetTop(valLabel, 4);
+            Plot.Children.Add(valLabel);
         }
 
 
@@ -280,6 +461,10 @@ namespace WpfApp1
                 MessageBox.Show("Kp/Ki/Kd phải là số."); return;
             }
             _port!.WriteLine($"PID:SET {kp.ToString(ci)},{ki.ToString(ci)},{kd.ToString(ci)}");
+        }
+        private void BtnDisconnect_Click(object sender, RoutedEventArgs e)
+        {
+            Disconnect(); // Gọi lại hàm bạn đã viết sẵn
         }
 
         private bool EnsurePort()
@@ -336,5 +521,39 @@ namespace WpfApp1
                 Debug.WriteLine($"Selected baud: {_baud}");
             }
         }
+        private void TryParseMode(string line)
+        {
+            // 1) MCU trả lời ngay: "OK MODE FZPID"
+            if (line.StartsWith("OK MODE", StringComparison.OrdinalIgnoreCase))
+            {
+                var m = line.Replace("OK MODE", "", StringComparison.OrdinalIgnoreCase).Trim();
+                Dispatcher.Invoke(() =>
+                {
+                    TxtMode.Text = $"MODE: {m}";
+                    // đồng bộ combobox
+                    foreach (var item in CmbMode.Items.OfType<ComboBoxItem>())
+                        if (string.Equals(item.Content?.ToString(), m, StringComparison.OrdinalIgnoreCase))
+                        { CmbMode.SelectedItem = item; break; }
+                });
+                return;
+            }
+
+            // 2) Hoặc MCU gửi kèm trong telemetry: "POS:... SP:... MODE:FZPID"
+            int i = line.IndexOf("MODE:", StringComparison.OrdinalIgnoreCase);
+            if (i >= 0)
+            {
+                var m = line[(i + 5)..].Trim();
+                Dispatcher.Invoke(() =>
+                {
+                    TxtMode.Text = $"MODE: {m}";
+                    foreach (var item in CmbMode.Items.OfType<ComboBoxItem>())
+                        if (string.Equals(item.Content?.ToString(), m, StringComparison.OrdinalIgnoreCase))
+                        { CmbMode.SelectedItem = item; break; }
+                });
+            }
+        }
+
+
+
     }
 }

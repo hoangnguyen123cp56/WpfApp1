@@ -1,33 +1,39 @@
 ﻿<Window x:Class="WpfApp1.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Hệ thống giám sát DC" Height="720" Width="1080"
-        WindowStartupLocation="CenterScreen">
+        Title="Hệ thống giám sát DC"
+        Height="720" Width="1080"
+        WindowStartupLocation="CenterScreen"
+        Background="White">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- Banner -->
+        <!-- ===== Banner ===== -->
         <Border Grid.Row="0" Background="#FF1CB1CE" Height="100">
             <DockPanel LastChildFill="True" Margin="16,0">
+                <Image Source="/positive-full-color-04-600x183.png"
+                       Height="60" Width="160" Margin="0,20,12,0"
+                       DockPanel.Dock="Left"/>
                 <TextBlock Text="HỆ THỐNG GIÁM SÁT ĐIỀU KHIỂN ĐỘNG CƠ DC"
-                   FontSize="26" FontWeight="Bold" VerticalAlignment="Center"/>
+                           FontSize="26" FontWeight="Bold" VerticalAlignment="Center"
+                           Foreground="White"/>
             </DockPanel>
         </Border>
 
-        <!-- Nội dung -->
+        <!-- ===== Nội dung ===== -->
         <Grid Grid.Row="1" Margin="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="13*"/>
-                <!-- Biểu đồ lớn -->
+                <!-- Biểu đồ -->
                 <ColumnDefinition Width="7*"/>
                 <!-- Điều khiển -->
             </Grid.ColumnDefinitions>
 
-            <!-- BIỂU ĐỒ + chỉ số -->
-            <Border Grid.Column="0" BorderBrush="#333" BorderThickness="1" CornerRadius="10" Padding="12">
+            <!-- ===== Biểu đồ ===== -->
+            <Border Grid.Column="0" BorderBrush="Black" BorderThickness="1" CornerRadius="10" Padding="12">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -35,35 +41,36 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Chỉ số tức thời -->
+                    <!-- Chỉ số -->
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Pos:"/>
+                        <TextBlock Text="Pos:" FontWeight="Bold"/>
                         <TextBlock x:Name="TxtPos" FontWeight="Bold" Margin="6,0,0,0"/>
-                        <TextBlock Text="Sp:" Margin="12,0,0,0"/>
-                        <TextBlock x:Name="TxtVel" FontWeight="Bold" Margin="6,0,0,0"/>
-                    
-              
+                        <TextBlock Text="SP:" FontWeight="Bold" Margin="16,0,0,0"/>
+                        <TextBlock x:Name="TxtSpLive" FontWeight="Bold" Margin="6,0,0,0"/>
                     </StackPanel>
 
                     <!-- Chart -->
-                    <Border Grid.Row="1" Margin="0,8,0,8" Background="#0E1320" CornerRadius="8"
-                  BorderBrush="#2D3444" BorderThickness="1">
+                    <Border Grid.Row="1" Margin="0,8,0,8"
+                            Background="White" CornerRadius="8"
+                            BorderBrush="Black" BorderThickness="1">
                         <Canvas x:Name="Plot" Margin="8" SizeChanged="Plot_SizeChanged"/>
                     </Border>
 
+                    <!-- Chú thích -->
                     <StackPanel Grid.Row="2" Orientation="Horizontal" Opacity="0.8">
-                        <TextBlock Text="• Pos"/>
-                        <TextBlock Text="• SP" Margin="16,0,0,0"/>
-              
+                        <Ellipse Width="10" Height="10" Fill="DeepSkyBlue" Margin="0,0,4,0"/>
+                        <TextBlock Text="Pos"/>
+                        <Ellipse Width="10" Height="10" Fill="Gray" Margin="16,0,4,0"/>
+                        <TextBlock Text="SP"/>
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- ĐIỀU KHIỂN -->
-            <Border Grid.Column="1" BorderBrush="#333" BorderThickness="1" CornerRadius="10" Padding="12" Margin="12,0,0,0">
+            <!-- ===== Điều khiển ===== -->
+            <Border Grid.Column="1" BorderBrush="Black" BorderThickness="1" CornerRadius="10" Padding="12" Margin="12,0,0,0">
                 <StackPanel>
+                    <!-- Serial -->
                     <TextBlock Text="Kết nối Serial" FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
-
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                         <TextBlock Text="Cổng COM" Width="110" VerticalAlignment="Center"/>
                         <ComboBox x:Name="CmbPorts" Width="160"/>
@@ -78,13 +85,27 @@
 
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <Button x:Name="BtnConnect" Content="Connect" Width="100"/>
-                        <Button x:Name="BtnDisconnect" Content="Disconnect" Width="100" Margin="8,0,0,0"/>
+                        <Button x:Name="BtnDisconnect" Content="Disconnect" Width="100" Margin="8,0,0,0" Click="BtnDisconnect_Click"/>
                     </StackPanel>
 
                     <Separator Margin="0,12,0,12"/>
 
+                    <!-- Mode -->
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Label Content="Mode:" VerticalAlignment="Center"/>
+                        <ComboBox x:Name="CmbMode" Width="100" Margin="8,0,0,0">
+                            <ComboBoxItem Content="PID"/>
+                            <ComboBoxItem Content="FZPID"/>
+                            <ComboBoxItem Content="FZDIR"/>
+                        </ComboBox>
+                        <Button x:Name="BtnMode" Content="Set Mode" Width="90" Margin="8,0,0,0"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtMode" Text="MODE: PID"
+                               FontFamily="Consolas" FontSize="14"
+                               FontWeight="Bold" Foreground="DarkBlue"/>
+
                     <!-- Setpoint -->
-                    <TextBlock Text="Setpoint" FontWeight="Bold"/>
+                    <TextBlock Text="Setpoint" FontWeight="Bold" Margin="0,12,0,0"/>
                     <StackPanel Orientation="Horizontal">
                         <TextBox x:Name="TxtSp" Width="120" Text="1200"/>
                         <Button x:Name="BtnSetSp" Content="Send SP" Margin="8,0,0,0"/>
@@ -103,14 +124,14 @@
                         <Button x:Name="BtnSetPid" Content="Apply PID" Margin="8,0,0,0"/>
                     </StackPanel>
 
-                    <!-- Enable/Disable/Reset -->
+                    <!-- Enable/Disable -->
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <Button x:Name="BtnEnable" Content="Enable" Width="90"/>
                         <Button x:Name="BtnDisable" Content="Disable" Width="90" Margin="8,0,0,0"/>
                         <Button x:Name="BtnRstEnc" Content="Reset ENC" Width="110" Margin="8,0,0,0"/>
                     </StackPanel>
 
-                    <!-- Test input -->
+                    <!-- Test -->
                     <TextBlock Text="Test Input" FontWeight="Bold" Margin="0,12,0,0"/>
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="BtnStep" Content="Step +ΔSP"/>
@@ -120,11 +141,11 @@
                         <TextBox x:Name="TxtFreq" Width="80" Text="0.5" Margin="8,0,0,0"/>
                     </StackPanel>
 
+                    <!-- Log -->
                     <TextBlock Text="Log" FontWeight="Bold" Margin="0,12,0,6"/>
                     <ListBox x:Name="LstLog" Height="220"/>
                 </StackPanel>
             </Border>
-            <Image Grid.Column="1" HorizontalAlignment="Left" Height="57" Margin="145,-91,0,0" VerticalAlignment="Top" Width="191" Source="/positive-full-color-04-600x183.png"/>
         </Grid>
     </Grid>
 </Window>

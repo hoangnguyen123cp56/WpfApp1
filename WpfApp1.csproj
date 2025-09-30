@@ -10,7 +10,6 @@
 
   <ItemGroup>
     <None Remove="Logo-VNU.png" />
-    <None Remove="positive-full-color-04-600x183.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,7 +18,6 @@
 
   <ItemGroup>
     <Resource Include="Logo-VNU.png" />
-    <Resource Include="positive-full-color-04-600x183.png" />
   </ItemGroup>
 
 </Project>
